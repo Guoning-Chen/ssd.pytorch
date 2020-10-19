@@ -31,20 +31,21 @@ fi
 # Download the image data.
 cd ./images
 echo "Downloading MSCOCO train images ..."
-curl -LO http://images.cocodataset.org/zips/train2014.zip
+# curl -LO http://images.cocodataset.org/zips/train2014.zip
+mv ../train2014.zip ./
 echo "Downloading MSCOCO val images ..."
-curl -LO http://images.cocodataset.org/zips/val2014.zip
+# curl -LO http://images.cocodataset.org/zips/val2014.zip
+mv ../val2014.zip ./
 
 cd ../
-if [ ! -d annotations]
-  then
-    mkdir -p ./annotations
-fi
+# 此处删去了原文件中的一段
 
 # Download the annotation data.
+mkdir -p ./annotations
 cd ./annotations
 echo "Downloading MSCOCO train/val annotations ..."
-curl -LO http://images.cocodataset.org/annotations/annotations_trainval2014.zip
+#curl -LO http://images.cocodataset.org/annotations/annotations_trainval2014.zip
+mv ../annotations_trainval2014.zip ./
 echo "Finished downloading. Now extracting ..."
 
 # Unzip data

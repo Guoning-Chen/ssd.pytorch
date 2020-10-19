@@ -19,39 +19,30 @@ import argparse
 def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
 
-
 parser = argparse.ArgumentParser(
     description='Single Shot MultiBox Detector Training With Pytorch')
 train_set = parser.add_mutually_exclusive_group()
-parser.add_argument('--dataset', default='VOC', choices=['VOC', 'COCO'],
-                    type=str, help='VOC or COCO')
-parser.add_argument('--dataset_root', default=VOC_ROOT,
-                    help='Dataset root directory path')
-parser.add_argument('--basenet', default='vgg16_reducedfc.pth',
-                    help='Pretrained base model')
-parser.add_argument('--batch_size', default=32, type=int,
-                    help='Batch size for training')
-parser.add_argument('--resume', default=None, type=str,
-                    help='Checkpoint state_dict file to resume training from')
-parser.add_argument('--start_iter', default=0, type=int,
-                    help='Resume training at this iter')
-parser.add_argument('--num_workers', default=4, type=int,
-                    help='Number of workers used in dataloading')
-parser.add_argument('--cuda', default=True, type=str2bool,
-                    help='Use CUDA to train model')
-parser.add_argument('--lr', '--learning-rate', default=1e-3, type=float,
-                    help='initial learning rate')
-parser.add_argument('--momentum', default=0.9, type=float,
-                    help='Momentum value for optim')
-parser.add_argument('--weight_decay', default=5e-4, type=float,
-                    help='Weight decay for SGD')
-parser.add_argument('--gamma', default=0.1, type=float,
-                    help='Gamma update for SGD')
-parser.add_argument('--visdom', default=False, type=str2bool,
-                    help='Use visdom for loss visualization')
-parser.add_argument('--save_folder', default='weights/',
-                    help='Directory for saving checkpoint models')
-args = parser.parse_args()
+
+
+class Params:
+    def __init__(self):
+        self.dataset = 'VOC'  # choices=['VOC', 'COCO'],
+        self.dataset_root = VOC_ROOT  # Dataset root directory path
+        self.basenet = 'vgg16_reducedfc.pth'  # Pretrained base model
+        self.batch_size = 32  # Batch size for training'
+        self.resume = None  # Checkpoint state_dict file to resume training from
+        self.start_iter = 0  # Resume training at this iter
+        self.num_workers = 4  # Number of workers used in dataloading
+        self.cuda = True  # Use CUDA to train model
+        self.lr = 1e-3  # initial learning rate
+        self.momentum = 0.9  # Momentum value for optim
+        self.weight_decay = 5e-4  # Weight decay for SGD
+        self.gamma = 0.1  # Gamma update for SGD
+        self.visdom = False  # Use visdom for loss visualization
+        self.save_folder = 'weights/'  # Directory for saving checkpoint models
+
+
+args = Params()
 
 
 if torch.cuda.is_available():
@@ -75,7 +66,7 @@ def train():
                 parser.error('Must specify dataset_root if specifying dataset')
             print("WARNING: Using default COCO dataset_root because " +
                   "--dataset_root was not specified.")
-            args.dataset_root = COCO_ROOT
+            dataset_root = COCO_ROOT
         cfg = coco
         dataset = COCODetection(root=args.dataset_root,
                                 transform=SSDAugmentation(cfg['min_dim'],
@@ -117,7 +108,7 @@ def train():
         ssd_net.loc.apply(weights_init)
         ssd_net.conf.apply(weights_init)
 
-    optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=args.momentum,
+    optimizer = optim.SGD(net.parameters(), lr=lr, momentum=args.momentum,
                           weight_decay=args.weight_decay)
     criterion = MultiBoxLoss(cfg['num_classes'], 0.5, True, 0, True, 3, 0.5,
                              False, args.cuda)
@@ -136,7 +127,7 @@ def train():
 
     step_index = 0
 
-    if args.visdom:
+    if visdom:
         vis_title = 'SSD.PyTorch on ' + dataset.name
         vis_legend = ['Loc Loss', 'Conf Loss', 'Total Loss']
         iter_plot = create_vis_plot('Iteration', 'Loss', vis_title, vis_legend)
@@ -149,7 +140,7 @@ def train():
     # create batch iterator
     batch_iterator = iter(data_loader)
     for iteration in range(args.start_iter, cfg['max_iter']):
-        if args.visdom and iteration != 0 and (iteration % epoch_size == 0):
+        if visdom and iteration != 0 and (iteration % epoch_size == 0):
             update_vis_plot(epoch, loc_loss, conf_loss, epoch_plot, None,
                             'append', epoch_size)
             # reset epoch loss counters
@@ -187,7 +178,7 @@ def train():
             print('timer: %.4f sec.' % (t1 - t0))
             print('iter ' + repr(iteration) + ' || Loss: %.4f ||' % (loss.data[0]), end=' ')
 
-        if args.visdom:
+        if visdom:
             update_vis_plot(iteration, loss_l.data[0], loss_c.data[0],
                             iter_plot, epoch_plot, 'append')
 
@@ -196,7 +187,7 @@ def train():
             torch.save(ssd_net.state_dict(), 'weights/ssd300_COCO_' +
                        repr(iteration) + '.pth')
     torch.save(ssd_net.state_dict(),
-               args.save_folder + '' + args.dataset + '.pth')
+               args.save_folder + '' + dataset + '.pth')
 
 
 def adjust_learning_rate(optimizer, gamma, step):
@@ -221,7 +212,7 @@ def weights_init(m):
 
 
 def create_vis_plot(_xlabel, _ylabel, _title, _legend):
-    return viz.line(
+    return args.viz.line(
         X=torch.zeros((1,)).cpu(),
         Y=torch.zeros((1, 3)).cpu(),
         opts=dict(
@@ -251,5 +242,9 @@ def update_vis_plot(iteration, loc, conf, window1, window2, update_type,
         )
 
 
+
+
+
 if __name__ == '__main__':
     train()
+
