@@ -1,3 +1,5 @@
+# 运行train.py
+## 准备数据集
 1. 选择一个放置数据集的位置，例如我想放在D盘，设置成D:/Dateset/ssd-pytorch，接下来我就用$指代这个路径
 
 2. 准备数据集：
@@ -27,3 +29,19 @@ VOC2012：
 最后剩下annnotations、images、VOCdevkit三个文件夹和instances_trainval35k.json.zip文件
 4. 在windows的根目录下创建软连接：管理员身份打开cmd运行
 `mklink /d C:\Users\chengn\data D:\Dateset\ssd-pytorch`
+## 解决因为版本不同而出现的 bug
+1. 错误1：
+`The shape of the mask [32, 8732] at index 0does not match the shape of the indexed tensor [279424, 1] at index 0`
+解决方法：
+将layers/modules/multibox_loss.py中的这两行交换位置：
+`loss_c[pos] = 0  # filter out pos boxes for now
+loss_c = loss_c.view(num, -1)`
+2. 错误2
+`IndexError: invalid index of a 0-dim tensor. Use tensor.item() to convert a 0-dim tensor to a Python number`
+解决方法：
+把错误行的 .data[0] 修改为 .item() ，注意一共有好几处，都需要替换
+## 启用 visdom可视化
+1. pip install visdom
+2. python -m visdom.server（在运行train.py文件之前）
+3. 用浏览器打开http://localhost:8097/
+4. 运行train.py文件

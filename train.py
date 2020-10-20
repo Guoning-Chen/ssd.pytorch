@@ -32,14 +32,22 @@ class Params:
         self.batch_size = 32  # Batch size for training'
         self.resume = None  # Checkpoint state_dict file to resume training from
         self.start_iter = 0  # Resume training at this iter
-        self.num_workers = 4  # Number of workers used in dataloading
+        self.num_workers = 1  # Number of workers used in dataloading
         self.cuda = True  # Use CUDA to train model
         self.lr = 1e-3  # initial learning rate
         self.momentum = 0.9  # Momentum value for optim
         self.weight_decay = 5e-4  # Weight decay for SGD
         self.gamma = 0.1  # Gamma update for SGD
-        self.visdom = False  # Use visdom for loss visualization
+        self.visdom = True  # Use visdom for loss visualization
         self.save_folder = 'weights/'  # Directory for saving checkpoint models
+        self.viz = None
+
+    def show(self):
+        for each in self.__dir__():
+            if (each[0] != '_') & (each != 'show'):
+                attr_name = each
+                attr_value = self.__getattribute__(each)
+                print(attr_name, ':', attr_value)
 
 
 args = Params()
@@ -81,7 +89,7 @@ def train():
 
     if args.visdom:
         import visdom
-        viz = visdom.Visdom()
+        args.viz = visdom.Visdom()
 
     ssd_net = build_ssd('train', cfg['min_dim'], cfg['num_classes'])
     net = ssd_net
@@ -108,10 +116,10 @@ def train():
         ssd_net.loc.apply(weights_init)
         ssd_net.conf.apply(weights_init)
 
-    optimizer = optim.SGD(net.parameters(), lr=lr, momentum=args.momentum,
+    optimizer = optim.SGD(net.parameters(), lr=args.lr, momentum=args.momentum,
                           weight_decay=args.weight_decay)
     criterion = MultiBoxLoss(cfg['num_classes'], 0.5, True, 0, True, 3, 0.5,
-                             False, args.cuda)
+                             False, args.cuda)  # SSD自定义的损失函数
 
     net.train()
     # loss counters
@@ -123,11 +131,11 @@ def train():
     epoch_size = len(dataset) // args.batch_size
     print('Training SSD on:', dataset.name)
     print('Using the specified args:')
-    print(args)
+    args.show()
 
     step_index = 0
 
-    if visdom:
+    if args.visdom:
         vis_title = 'SSD.PyTorch on ' + dataset.name
         vis_legend = ['Loc Loss', 'Conf Loss', 'Total Loss']
         iter_plot = create_vis_plot('Iteration', 'Loss', vis_title, vis_legend)
@@ -140,7 +148,7 @@ def train():
     # create batch iterator
     batch_iterator = iter(data_loader)
     for iteration in range(args.start_iter, cfg['max_iter']):
-        if visdom and iteration != 0 and (iteration % epoch_size == 0):
+        if args.visdom and iteration != 0 and (iteration % epoch_size == 0):
             update_vis_plot(epoch, loc_loss, conf_loss, epoch_plot, None,
                             'append', epoch_size)
             # reset epoch loss counters
@@ -155,12 +163,13 @@ def train():
         # load train data
         images, targets = next(batch_iterator)
 
-        if args.cuda:
-            images = Variable(images.cuda())
-            targets = [Variable(ann.cuda(), volatile=True) for ann in targets]
-        else:
-            images = Variable(images)
-            targets = [Variable(ann, volatile=True) for ann in targets]
+        with torch.no_grad():
+            if args.cuda:
+                images = Variable(images.cuda())  # 4维矩阵
+                targets = [Variable(ann.cuda()) for ann in targets]  # 长度为32的 list
+            else:
+                images = Variable(images)
+                targets = [Variable(ann) for ann in targets]
         # forward
         t0 = time.time()
         out = net(images)
@@ -171,15 +180,18 @@ def train():
         loss.backward()
         optimizer.step()
         t1 = time.time()
-        loc_loss += loss_l.data[0]
-        conf_loss += loss_c.data[0]
+        # loc_loss += loss_l.data[0]  # 原始代码
+        # conf_loss += loss_c.item()
+        loc_loss += loss_l.item()  # 修改后的
+        conf_loss += loss_c.item()
 
         if iteration % 10 == 0:
             print('timer: %.4f sec.' % (t1 - t0))
-            print('iter ' + repr(iteration) + ' || Loss: %.4f ||' % (loss.data[0]), end=' ')
+            print('iter ' + repr(iteration) +
+                  ' || Loss: %.4f ||' % (loss.item()), end=' ')
 
-        if visdom:
-            update_vis_plot(iteration, loss_l.data[0], loss_c.data[0],
+        if args.visdom:
+            update_vis_plot(iteration, loss_l.item(), loss_c.item(),
                             iter_plot, epoch_plot, 'append')
 
         if iteration != 0 and iteration % 5000 == 0:
@@ -202,7 +214,7 @@ def adjust_learning_rate(optimizer, gamma, step):
 
 
 def xavier(param):
-    init.xavier_uniform(param)
+    init.xavier_uniform_(param)
 
 
 def weights_init(m):
@@ -226,7 +238,7 @@ def create_vis_plot(_xlabel, _ylabel, _title, _legend):
 
 def update_vis_plot(iteration, loc, conf, window1, window2, update_type,
                     epoch_size=1):
-    viz.line(
+    args.viz.line(
         X=torch.ones((1, 3)).cpu() * iteration,
         Y=torch.Tensor([loc, conf, loc + conf]).unsqueeze(0).cpu() / epoch_size,
         win=window1,
@@ -234,7 +246,7 @@ def update_vis_plot(iteration, loc, conf, window1, window2, update_type,
     )
     # initialize epoch plot on first iteration
     if iteration == 0:
-        viz.line(
+        args.viz.line(
             X=torch.zeros((1, 3)).cpu(),
             Y=torch.Tensor([loc, conf, loc + conf]).unsqueeze(0).cpu(),
             win=window2,
